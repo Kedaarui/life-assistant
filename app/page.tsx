@@ -1,69 +1,230 @@
-import Image from "next/image";
+import Link from "next/link";
+import { Plus } from "lucide-react";
+import { CategoryDistribution } from "@/components/category-distribution";
+import { EventRow } from "@/components/event-row";
+import { PageHeader } from "@/components/page-header";
+import { QuickEvent } from "@/components/quick-event";
+import {
+  getCategoryCounts,
+  getStats,
+  listEntries,
+  type EntryWithTags,
+} from "@/lib/modules/entries/service";
+import {
+  btnPrimary,
+  cardClass,
+  cardTitleClass,
+} from "@/lib/ui";
+import { cn } from "@/lib/utils";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+function daysAgo(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date;
+}
+
+function getMood(entries: EntryWithTags[]) {
+  const withMood = entries.filter(
+    (entry) => entry.sentiment !== null,
+  );
+
+  if (withMood.length === 0) {
+    return {
+      label: "还没有记下",
+      detail: "记的时候顺手选一下心情，慢慢就能看出变化。",
+    };
+  }
+
+  const values = withMood.map((entry) => entry.sentiment!);
+  const average =
+    values.reduce((sum, value) => sum + value, 0) / values.length;
+  const label =
+    average >= 4.2
+      ? "轻快"
+      : average >= 3.4
+        ? "偏积极"
+        : average >= 2.6
+          ? "比较平静"
+          : average >= 1.8
+            ? "有点低"
+            : "有些低落";
+
+  const happy = values.filter((value) => value >= 4).length;
+  const calm = values.filter((value) => value === 3).length;
+  const low = values.filter((value) => value <= 2).length;
+
+  return {
+    label,
+    detail: `开心 ${happy} 次，平静 ${calm} 次，低落 ${low} 次。`,
+  };
+}
+
+function getTopPeople(entries: EntryWithTags[]) {
+  const counts = new Map<string, number>();
+
+  for (const entry of entries) {
+    for (const person of entry.people) {
+      counts.set(person.name, (counts.get(person.name) ?? 0) + 1);
+    }
+  }
+
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4);
+}
+
+export default function TodayPage() {
+  const stats = getStats();
+  const recentAll = listEntries({ limit: 200, order: "desc" });
+  const recent = recentAll.slice(0, 6);
+  const recentMood = recentAll.filter(
+    (entry) => entry.eventTime >= daysAgo(30),
+  );
+  const recentPeople = recentAll.filter(
+    (entry) => entry.eventTime >= daysAgo(90),
+  );
+  const categories = getCategoryCounts(90);
+  const mood = getMood(recentMood);
+  const topPeople = getTopPeople(recentPeople);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div>
+      <PageHeader
+        title="今天"
+        description="记下此刻，也看看最近的日子。"
+        actions={
+          <Link href="/events/new" className={btnPrimary}>
+            <Plus size={15} />
+            记一件事
+          </Link>
+        }
+      />
+
+      <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 border-y border-line/70 py-3 text-[12.5px] text-ink-soft">
+        <span>
+          <span className="display-nums font-display text-[16px] text-ink">
+            {stats.total}
+          </span>{" "}
+          件记下的事
+        </span>
+        <span>
+          连续记录{" "}
+          <span className="display-nums font-display text-[16px] text-ink">
+            {stats.streak}
+          </span>{" "}
+          天
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+          最近的心情 · {mood.label === "还没有记下" ? "还没记下" : mood.label}
+        </span>
+      </div>
+
+      <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="space-y-5">
+          <QuickEvent />
+
+          <section>
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <h2 className="text-[15px] font-semibold text-ink">
+                  最近的日子
+                </h2>
+                <p className="mt-0.5 text-[11px] text-ink-faint">
+                  按发生时间倒序
+                </p>
+              </div>
+              <Link
+                href="/events"
+                className="text-[12px] font-medium text-accent transition hover:text-accent-deep"
+              >
+                全部记录
+              </Link>
+            </div>
+
+            <div className="mt-3 overflow-hidden rounded-xl border border-line bg-surface shadow-card">
+              {recent.length > 0 ? (
+                <div>
+                  {recent.map((event) => (
+                    <EventRow key={event.id} event={event} />
+                  ))}
+                </div>
+              ) : (
+                <div className="px-5 py-12 text-center">
+                  <p className="text-[14px] font-medium text-ink">
+                    还没有记下什么
+                  </p>
+                  <p className="mt-1 text-[12px] text-ink-faint">
+                    从上方写下第一件刚刚发生的事。
+                  </p>
+                </div>
+              )}
+            </div>
+          </section>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div className="space-y-5">
+          <section className={cn(cardClass, "p-5")}>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className={cardTitleClass}>最近的心情</h2>
+              <span className="text-[11px] text-ink-faint">
+                近 30 天
+              </span>
+            </div>
+            <p className="mt-4 text-[24px] font-medium leading-tight text-accent-deep">
+              {mood.label}
+            </p>
+            <p className="mt-2 text-[12px] leading-5 text-ink-soft">
+              {mood.detail}
+            </p>
+          </section>
+
+          <section className={cn(cardClass, "p-5")}>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className={cardTitleClass}>常出现的人</h2>
+              <span className="text-[11px] text-ink-faint">
+                近 90 天
+              </span>
+            </div>
+
+            {topPeople.length > 0 ? (
+              <ul className="mt-3 space-y-2.5">
+                {topPeople.map(([name, count]) => (
+                  <li key={name}>
+                    <Link
+                      href={`/search?q=${encodeURIComponent(name)}`}
+                      className="flex items-center justify-between gap-3 text-[13px] text-ink-soft transition hover:text-ink"
+                    >
+                      <span className="truncate">{name}</span>
+                      <span className="display-nums shrink-0 font-display text-[12px] text-ink-faint">
+                        {count} 次
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-[12px] leading-5 text-ink-faint">
+                还没有记下一起的人。
+              </p>
+            )}
+          </section>
+
+          <section className={cn(cardClass, "p-5")}>
+            <div>
+              <h2 className={cardTitleClass}>生活的重心</h2>
+              <p className="mt-0.5 text-[11px] text-ink-faint">
+                近 90 天
+              </p>
+            </div>
+            <div className="mt-4">
+              <CategoryDistribution data={categories} />
+            </div>
+          </section>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
